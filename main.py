@@ -40,9 +40,6 @@ def extract_securities_csv() -> None:
     cursor.close()
     cnx.close()
 
-
-
-
 def extract_bhav_csv(dates: list) -> list:
     cnx = create_connection()
     cursor = cnx.cursor()
@@ -111,7 +108,9 @@ def create_tables():
             cursor.execute(table_description)
         except mysql.connector.Error as err:
             if err.errno == errorcode.ER_TABLE_EXISTS_ERROR:
-                print("already exists.")
+                print("already exists. Adding New data...")
+                query = "delete from "+table_name
+                cursor.execute(query)
             else:
                 print(err.msg)
         else:
@@ -120,13 +119,33 @@ def create_tables():
     cursor.close()
     cnx.close()
 
+def get_30_days_top_25(last: str, first: str) -> None:
+    _last = last[8:10] + "-" + month[last[5:7]] + "-" + last[:4]
+    _first = first[8:10]+"-"+month[first[5:7]]+"-"+first[:4]
+    print(f"-----------------------------------------------------------------------------------------------------------------\n\nTop 25 gainers for Last 30 Days \n")
+    cnx = create_connection()
+    cursor = cnx.cursor()
+    query = ("select * from available_securities AT inner join (select A.isinNumber,((B.close - A.close)*100/A.close) as Gain from (select * from bhav where timestamp=%s) A inner join (select * from bhav where timestamp= %s) B on A.isinNumber=B.isinNumber) BT on AT.isinNumber=BT.isinNumber order by BT.Gain DESC limit 25")
+    cursor.execute(query, (_first,_last))
+    data = []
+    for (symbol, name, isinNumber, x, gain) in cursor:
+        data.append([symbol, name, isinNumber, gain])
+    df = pd.DataFrame(data, columns=["SYMBOL", "NAME OF THE COMPANY", "ISINNUMBER", "GAIN (%)"])
+    cursor.close()
+    cnx.close()
+    print(df)
+    return df
+
 
 dates = get_dates(31)
 print(dates)
-create_tables()     #one time function to create tables in the database. !can be commented after one time execution
-cds = extract_bhav_csv(dates) #one-time function to extract data for last 30 days !can be commented after one time execution
-extract_securities_csv()    #one time function to extract the data of all securities !can be commented after one time execution
+create_tables()     # one time function to create tables in the database. !can be commented after one time execution
+cds = extract_bhav_csv(dates) # one-time function to extract data for last 30 days !can be commented after one time execution
+extract_securities_csv()    # one time function to extract the data of all securities !can be commented after one time execution
 for i in dates:    # for loop to get the top 25 gainers of last 30 days
     print(get_top_25(i))
 
 
+get_30_days_top_25(cds[0], cds[-1])  # to get the top gainers for last 30 days
+
+#get_30_days_top_25("2022-12-01 18:47:32.062184","2022-11-01 18:47:32.062184")
